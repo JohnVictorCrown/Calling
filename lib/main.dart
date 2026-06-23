@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter_phone_direct_caller/flutter_phone_direct_caller.dart';
@@ -11,23 +10,6 @@ import 'package:phone_state/phone_state.dart';
 
 // Use a nullable handler to avoid "Late Initialization" errors
 MyCallAudioHandler? _handler;
-
-const _speakerChannel = MethodChannel('com.jv.calling/speakerphone');
-
-Future<void> _enableSpeakerphone() async {
-  try { await _speakerChannel.invokeMethod('enableSpeakerphone'); } catch (_) {}
-}
-
-Future<void> _disableSpeakerphone() async {
-  try { await _speakerChannel.invokeMethod('disableSpeakerphone'); } catch (_) {}
-}
-
-Future<void> _retrySpeakerphone({int times = 5, Duration delay = const Duration(milliseconds: 800)}) async {
-  for (var i = 0; i < times; i++) {
-    await _enableSpeakerphone();
-    await Future.delayed(delay);
-  }
-}
 
 Future<void> main() async {
   // 1. Ensure Flutter is ready
@@ -154,14 +136,10 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
     _phoneSub = PhoneState.stream.listen((event) {
       if (!mounted) return;
       setState(() => _uiPhoneStatus = event.status);
-      if (_autoDialActive) {
-        if (event.status == PhoneStateStatus.NOTHING || event.status == PhoneStateStatus.CALL_ENDED) {
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted && _autoDialActive) _autoDialNext();
-          });
-        } else if (event.status == PhoneStateStatus.CALL_STARTED) {
-          _enableSpeakerphone();
-        }
+      if (_autoDialActive && (event.status == PhoneStateStatus.NOTHING || event.status == PhoneStateStatus.CALL_ENDED)) {
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted && _autoDialActive) _autoDialNext();
+        });
       }
     });
     _refreshData();
@@ -245,7 +223,6 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
   void _toggleAutoDial() async {
     if (_autoDialActive) {
       setState(() => _autoDialActive = false);
-      await _disableSpeakerphone();
       return;
     }
     if (!await Permission.phone.isGranted) {
@@ -261,12 +238,11 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
       await _refreshData();
     }
     setState(() => _autoDialActive = true);
-    await _enableSpeakerphone();
     await _autoDialNext();
   }
 
   Future<void> _autoDialNext() async {
-    if (!_autoDialActive) { await _disableSpeakerphone(); return; }
+    if (!_autoDialActive) return;
     final dbPath = await getDatabasesPath();
     final db = await openDatabase(p.join(dbPath, 'callcenter.db'));
     final List<Map<String, dynamic>> maps = await db.query(
@@ -275,7 +251,6 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
     if (maps.isEmpty) {
       setState(() => _autoDialActive = false);
       await db.close();
-      await _disableSpeakerphone();
       await _refreshData();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("All calls completed!")),
@@ -286,9 +261,7 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
     final number = maps.first['number'] as String;
     await db.update('numbers', {'wasCalled': 1}, where: 'id = ?', whereArgs: [id]);
     await db.close();
-    await _enableSpeakerphone();
     await FlutterPhoneDirectCaller.callNumber(number);
-    _retrySpeakerphone();
     await _refreshData();
   }
 
@@ -354,10 +327,7 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Text(
-                    _autoDialActive ? "Auto-dialing... (speakerphone)" : "Status: ${_uiPhoneStatus.name}",
-                    style: TextStyle(fontSize: 12, color: _autoDialActive ? Colors.green : Colors.blueGrey),
-                  ),
+                  Text("Status: ${_uiPhoneStatus.name}", style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
                   if (!_autoDialActive) ...[
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
