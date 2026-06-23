@@ -153,14 +153,13 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
     WidgetsBinding.instance.addObserver(this);
     _phoneSub = PhoneState.stream.listen((event) {
       if (!mounted) return;
-      final prev = _uiPhoneStatus;
       setState(() => _uiPhoneStatus = event.status);
       if (_autoDialActive) {
         if (event.status == PhoneStateStatus.NOTHING || event.status == PhoneStateStatus.CALL_ENDED) {
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted && _autoDialActive) _autoDialNext();
           });
-        } else if (event.status != prev && event.status == PhoneStateStatus.OFF_HOOK) {
+        } else if (event.status == PhoneStateStatus.CALL_STARTED) {
           _enableSpeakerphone();
         }
       }
