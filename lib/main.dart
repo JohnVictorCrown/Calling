@@ -12,6 +12,16 @@ import 'package:phone_state/phone_state.dart';
 // Use a nullable handler to avoid "Late Initialization" errors
 MyCallAudioHandler? _handler;
 
+const _speakerChannel = MethodChannel('com.jv.calling/speakerphone');
+
+Future<void> _enableSpeakerphone() async {
+  try { await _speakerChannel.invokeMethod('enableSpeakerphone'); } catch (_) {}
+}
+
+Future<void> _disableSpeakerphone() async {
+  try { await _speakerChannel.invokeMethod('disableSpeakerphone'); } catch (_) {}
+}
+
 Future<void> main() async {
   // 1. Ensure Flutter is ready
   WidgetsFlutterBinding.ensureInitialized();
@@ -128,13 +138,20 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
   PhoneStateStatus _uiPhoneStatus = PhoneStateStatus.NOTHING;
   StreamSubscription? _phoneSub;
   bool _isLoading = false;
+  bool _autoDialActive = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _phoneSub = PhoneState.stream.listen((event) {
-      if (mounted) setState(() => _uiPhoneStatus = event.status);
+      if (!mounted) return;
+      setState(() => _uiPhoneStatus = event.status);
+      if (_autoDialActive && (event.status == PhoneStateStatus.NOTHING || event.status == PhoneStateStatus.CALL_ENDED)) {
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted && _autoDialActive) _autoDialNext();
+        });
+      }
     });
     _refreshData();
   }
@@ -197,23 +214,70 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
     setState(() => _isLoading = false);
   }
 
-  void _manualCall() async {
+  void _callNext() async {
     if (!await Permission.phone.isGranted) {
       await Permission.phone.request();
       return;
     }
     if (_uiPhoneStatus != PhoneStateStatus.NOTHING && _uiPhoneStatus != PhoneStateStatus.CALL_ENDED) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Already in a call!")));
+       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+         const SnackBar(content: Text("Already in a call!")),
+       );
        return;
     }
-    
-    // Call via handler if it exists, otherwise dial directly as fallback
     if (_handler != null) {
       await _handler!.play();
-    } else {
-      _refreshData(); // fallback refresh
     }
-    Future.delayed(const Duration(seconds: 1), () => _refreshData());
+    Future.delayed(const Duration(seconds: 1), _refreshData);
+  }
+
+  void _toggleAutoDial() async {
+    if (_autoDialActive) {
+      setState(() => _autoDialActive = false);
+      await _disableSpeakerphone();
+      return;
+    }
+    if (!await Permission.phone.isGranted) {
+      await Permission.phone.request();
+      return;
+    }
+    if (_stats['remaining'] == 0 && _stats['total']! > 0) {
+      // Reset all numbers and start again
+      final dbPath = await getDatabasesPath();
+      final db = await openDatabase(p.join(dbPath, 'callcenter.db'));
+      await db.update('numbers', {'wasCalled': 0});
+      await db.close();
+      await _refreshData();
+    }
+    setState(() => _autoDialActive = true);
+    await _enableSpeakerphone();
+    await _autoDialNext();
+  }
+
+  Future<void> _autoDialNext() async {
+    if (!_autoDialActive) { await _disableSpeakerphone(); return; }
+    final dbPath = await getDatabasesPath();
+    final db = await openDatabase(p.join(dbPath, 'callcenter.db'));
+    final List<Map<String, dynamic>> maps = await db.query(
+      'numbers', where: 'wasCalled = ?', whereArgs: [0], limit: 1,
+    );
+    if (maps.isEmpty) {
+      setState(() => _autoDialActive = false);
+      await db.close();
+      await _disableSpeakerphone();
+      await _refreshData();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("All calls completed!")),
+      );
+      return;
+    }
+    final id = maps.first['id'] as int;
+    final number = maps.first['number'] as String;
+    await db.update('numbers', {'wasCalled': 1}, where: 'id = ?', whereArgs: [id]);
+    await db.close();
+    await _enableSpeakerphone();
+    await FlutterPhoneDirectCaller.callNumber(number);
+    await _refreshData();
   }
 
   @override
@@ -254,23 +318,46 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
                   SizedBox(
                     width: 180, height: 180,
                     child: ElevatedButton(
-                      onPressed: _manualCall,
+                      onPressed: _toggleAutoDial,
                       style: ElevatedButton.styleFrom(
                         shape: const CircleBorder(),
-                        backgroundColor: _stats['remaining'] == 0 && _stats['total']! > 0 ? Colors.orange : Colors.green,
+                        backgroundColor: _autoDialActive ? Colors.red : (_stats['remaining'] == 0 && _stats['total']! > 0 ? Colors.orange : Colors.green),
                         foregroundColor: Colors.white
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(_stats['remaining'] == 0 && _stats['total']! > 0 ? Icons.refresh : Icons.call, size: 50),
-                          Text(_stats['remaining'] == 0 && _stats['total']! > 0 ? "RESET" : "CALL NEXT", style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Icon(
+                            _autoDialActive ? Icons.stop :
+                            (_stats['remaining'] == 0 && _stats['total']! > 0 ? Icons.refresh : Icons.call),
+                            size: 50,
+                          ),
+                          Text(
+                            _autoDialActive ? "STOP" :
+                            (_stats['remaining'] == 0 && _stats['total']! > 0 ? "RESET" : "AUTO-DIAL"),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Text("Status: ${_uiPhoneStatus.name}", style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+                  Text(
+                    _autoDialActive ? "Auto-dialing... (speakerphone)" : "Status: ${_uiPhoneStatus.name}",
+                    style: TextStyle(fontSize: 12, color: _autoDialActive ? Colors.green : Colors.blueGrey),
+                  ),
+                  if (!_autoDialActive) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _stats['remaining'] == 0 ? null : _callNext,
+                      icon: const Icon(Icons.call, size: 18),
+                      label: const Text("CALL NEXT"),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.green,
+                        side: const BorderSide(color: Colors.green),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
