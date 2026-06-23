@@ -22,6 +22,13 @@ Future<void> _disableSpeakerphone() async {
   try { await _speakerChannel.invokeMethod('disableSpeakerphone'); } catch (_) {}
 }
 
+Future<void> _retrySpeakerphone({int times = 5, Duration delay = const Duration(milliseconds: 800)}) async {
+  for (var i = 0; i < times; i++) {
+    await _enableSpeakerphone();
+    await Future.delayed(delay);
+  }
+}
+
 Future<void> main() async {
   // 1. Ensure Flutter is ready
   WidgetsFlutterBinding.ensureInitialized();
@@ -146,11 +153,16 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
     WidgetsBinding.instance.addObserver(this);
     _phoneSub = PhoneState.stream.listen((event) {
       if (!mounted) return;
+      final prev = _uiPhoneStatus;
       setState(() => _uiPhoneStatus = event.status);
-      if (_autoDialActive && (event.status == PhoneStateStatus.NOTHING || event.status == PhoneStateStatus.CALL_ENDED)) {
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted && _autoDialActive) _autoDialNext();
-        });
+      if (_autoDialActive) {
+        if (event.status == PhoneStateStatus.NOTHING || event.status == PhoneStateStatus.CALL_ENDED) {
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted && _autoDialActive) _autoDialNext();
+          });
+        } else if (event.status != prev && event.status == PhoneStateStatus.OFF_HOOK) {
+          _enableSpeakerphone();
+        }
       }
     });
     _refreshData();
@@ -277,6 +289,7 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
     await db.close();
     await _enableSpeakerphone();
     await FlutterPhoneDirectCaller.callNumber(number);
+    _retrySpeakerphone();
     await _refreshData();
   }
 
