@@ -25,6 +25,10 @@ jobs:
           channel: 'stable'
       - run: flutter pub get
 
+      # Generate launcher icons from assets/logo.png
+      - name: Generate Launcher Icons
+        run: dart run flutter_launcher_icons
+
       # 1. Build UNIVERSAL APK (Fat APK for all devices)
       - name: Build Universal APK
         run: flutter build apk --release
