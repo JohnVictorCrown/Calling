@@ -31,7 +31,7 @@ List<String> extractPhoneNumbers(String text) {
       international = '+$digits';
     }
     if (international != null) {
-      if (!hadPlus) {
+      if (!line.contains('+')) {
         try {
           final parsed = PhoneNumber.parse(international!);
           if (parsed.isValid()) {
