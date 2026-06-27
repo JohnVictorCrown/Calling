@@ -31,7 +31,9 @@ List<String> extractPhoneNumbers(String text) {
       international = '+$digits';
     }
     if (international != null) {
-      if (!line.contains('+')) {
+      final skipParser = line.contains('+');
+      print('DBG: line="$line" digits="$digits" international="$international" skipParser=$skipParser');
+      if (!skipParser) {
         try {
           final parsed = PhoneNumber.parse(international!);
           if (parsed.isValid()) {
