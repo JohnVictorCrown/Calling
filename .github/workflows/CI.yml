@@ -10,9 +10,24 @@ permissions:
 
 jobs:
   # ---------------------------------------------------
+  # 0. TESTS
+  # ---------------------------------------------------
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - run: flutter pub get
+      - name: Run tests
+        run: flutter test test/parser_test.dart
+
+  # ---------------------------------------------------
   # 1. ANDROID BUILD (Universal + Splits)
   # ---------------------------------------------------
   build-android:
+    needs: [test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +67,7 @@ jobs:
   # 2. IOS BUILD
   # ---------------------------------------------------
   build-ios:
+    needs: [test]
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

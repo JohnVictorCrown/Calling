@@ -8,6 +8,43 @@ import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:phone_state/phone_state.dart';
 
+List<String> extractPhoneNumbers(String text) {
+  final result = <String>[];
+  final lines = text.split(RegExp(r'[\r\n]+'));
+  for (final rawLine in lines) {
+    final line = rawLine.trim();
+    if (line.isEmpty) continue;
+    String digits = line.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) continue;
+    final hadPlus = line.contains('+');
+    String? international;
+    if (hadPlus && digits.length >= 10 && digits.length <= 15) {
+      international = '+$digits';
+    } else if (digits.length == 10 || digits.length == 11) {
+      if (digits.length == 10 && (int.tryParse(digits.substring(2, 3)) ?? 0) >= 6) {
+        digits = '${digits.substring(0, 2)}9${digits.substring(2)}';
+      }
+      international = '+55$digits';
+    } else if (digits.length == 12 && digits.startsWith('55')) {
+      international = '+$digits';
+    } else if (digits.length == 13 && digits.startsWith('55')) {
+      international = '+$digits';
+    }
+    if (international != null) {
+      try {
+        final parsed = PhoneNumber.parse(international);
+        if (parsed.isValid()) {
+          international = '+${parsed.countryCode}${parsed.nsn}';
+        }
+      } catch (_) {}
+      if (international.length >= 12 && international.length <= 16) {
+        result.add(international);
+      }
+    }
+  }
+  return result;
+}
+
 // Use a nullable handler to avoid "Late Initialization" errors
 MyCallAudioHandler? _handler;
 
@@ -181,44 +218,9 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
     setState(() => _isLoading = true);
     final dbPath = await getDatabasesPath();
     final db = await openDatabase(p.join(dbPath, 'callcenter.db'));
-    final text = _textController.text;
-    final lines = text.split(RegExp(r'[\r\n]+'));
-
-    for (final rawLine in lines) {
-      final line = rawLine.trim();
-      if (line.isEmpty) continue;
-
-      String digits = line.replaceAll(RegExp(r'\D'), '');
-      if (digits.isEmpty) continue;
-
-      bool hadPlus = line.contains('+');
-      String? international;
-
-      if (hadPlus && digits.length >= 10 && digits.length <= 15) {
-        international = '+$digits';
-      } else if (digits.length == 10 || digits.length == 11) {
-        if (digits.length == 10 && (int.tryParse(digits.substring(2, 3)) ?? 0) >= 6) {
-          digits = '${digits.substring(0, 2)}9${digits.substring(2)}';
-        }
-        international = '+55$digits';
-      } else if (digits.length == 12 && digits.startsWith('55')) {
-        international = '+$digits';
-      } else if (digits.length == 13 && digits.startsWith('55')) {
-        international = '+$digits';
-      }
-
-      if (international != null) {
-        try {
-          final parsed = PhoneNumber.parse(international);
-          if (parsed.isValid()) {
-            international = '+${parsed.countryCode}${parsed.nsn}';
-          }
-        } catch (_) {}
-        if (international.length >= 12 && international.length <= 16) {
-          await db.insert('numbers', {'number': international, 'wasCalled': 0},
-              conflictAlgorithm: ConflictAlgorithm.ignore);
-        }
-      }
+    for (final number in extractPhoneNumbers(_textController.text)) {
+      await db.insert('numbers', {'number': number, 'wasCalled': 0},
+          conflictAlgorithm: ConflictAlgorithm.ignore);
     }
     _textController.clear();
     await db.close();
