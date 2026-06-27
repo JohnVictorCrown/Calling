@@ -99,5 +99,80 @@ void main() {
       final result = extractPhoneNumbers(text);
       expect(result, ['+554888000514', '+554891328890']);
     });
+
+    test('extracts number from arbitrary sentence with +', () {
+      final result = extractPhoneNumbers('Call me at +554888000514 thanks');
+      expect(result, ['+554888000514']);
+    });
+
+    test('extracts number from arbitrary sentence without +', () {
+      final result = extractPhoneNumbers('My number is 11999999999 please call');
+      expect(result, ['+5511999999999']);
+    });
+
+    test('ignores digits in words when scanning for number', () {
+      final result = extractPhoneNumbers('Room 2nd floor number 11999999999');
+      expect(result, ['+5511999999999']);
+    });
+
+    test('ignores short digit sequences in text', () {
+      final result = extractPhoneNumbers('There are 12 items and my phone is 11999999999');
+      expect(result, ['+5511999999999']);
+    });
+
+    test('ignores years and small numbers in text', () {
+      final result = extractPhoneNumbers('Since 2025, my best number is +554888000514');
+      expect(result, ['+554888000514']);
+    });
+
+    test('extracts multiple numbers from prose', () {
+      final result = extractPhoneNumbers('Call +554888000514 or 11999999999 for info');
+      expect(result, ['+554888000514', '+5511999999999']);
+    });
+
+    test('handles number in parentheses with text around it', () {
+      final result = extractPhoneNumbers('Contact: (+55 48) 8800-0514 is my line');
+      expect(result, ['+554888000514']);
+    });
+
+    test('handles number at start of text', () {
+      final result = extractPhoneNumbers('11999999999 is my mobile');
+      expect(result, ['+5511999999999']);
+    });
+
+    test('handles number at end of text', () {
+      final result = extractPhoneNumbers('My best number is +554888000514');
+      expect(result, ['+554888000514']);
+    });
+
+    test('extracts formatted number with dashes from sentence', () {
+      final result = extractPhoneNumbers('Reach me at 11-3224-4555 during work hours');
+      expect(result, ['+551132244555']);
+    });
+
+    test('extracts only phone-length sequences, skips short codes', () {
+      final result = extractPhoneNumbers('Code 1234 then dial 11999999999');
+      expect(result, ['+5511999999999']);
+    });
+
+    test('extracts Brazilian mobile from text with 9th digit injection', () {
+      final result = extractPhoneNumbers('Ligue 61999887733 agora');
+      expect(result, ['+5561999887733']);
+    });
+
+    test('extracts Brazilian landline from text (no 9th digit)', () {
+      final result = extractPhoneNumbers('Escritorio 2132244555 comercial');
+      expect(result, ['+552132244555']);
+    });
+
+    test('extracts 12-digit number from text without +', () {
+      final result = extractPhoneNumbers('Meu numero 554888000514 ok');
+      expect(result, ['+554888000514']);
+    });
+
+    test('extracts US number from sentence', () {
+      final result = extractPhoneNumbers('My US line is +15135328138 please text');
+      expect(result, ['+15135328138']);
+    });
   });
 }

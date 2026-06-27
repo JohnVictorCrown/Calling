@@ -11,38 +11,40 @@ import 'package:phone_state/phone_state.dart';
 List<String> extractPhoneNumbers(String text) {
   final result = <String>[];
   final lines = text.split(RegExp(r'[\r\n]+'));
+  final phoneRegex = RegExp(r'\+?[\d\s\-\(\)]{10,}');
   for (final rawLine in lines) {
     final line = rawLine.trim();
     if (line.isEmpty) continue;
-    final plusIdx = line.indexOf('+');
-    final src = plusIdx >= 0 ? line.substring(plusIdx) : line;
-    String digits = src.replaceAll(RegExp(r'\D'), '');
-    if (digits.isEmpty) continue;
-    final hadPlus = plusIdx >= 0;
-    String? international;
-    if (hadPlus && digits.length >= 10 && digits.length <= 15) {
-      international = '+$digits';
-    } else if (digits.length == 10 || digits.length == 11) {
-      if (digits.length == 10 && (int.tryParse(digits.substring(2, 3)) ?? 0) >= 6) {
-        digits = '${digits.substring(0, 2)}9${digits.substring(2)}';
+    for (final match in phoneRegex.allMatches(line)) {
+      final src = match.group(0)!;
+      String digits = src.replaceAll(RegExp(r'\D'), '');
+      if (digits.isEmpty) continue;
+      final hadPlus = src.startsWith('+');
+      String? international;
+      if (hadPlus && digits.length >= 10 && digits.length <= 15) {
+        international = '+$digits';
+      } else if (digits.length == 10 || digits.length == 11) {
+        if (digits.length == 10 && (int.tryParse(digits.substring(2, 3)) ?? 0) >= 6) {
+          digits = '${digits.substring(0, 2)}9${digits.substring(2)}';
+        }
+        international = '+55$digits';
+      } else if (digits.length == 12 && digits.startsWith('55')) {
+        international = '+$digits';
+      } else if (digits.length == 13 && digits.startsWith('55')) {
+        international = '+$digits';
       }
-      international = '+55$digits';
-    } else if (digits.length == 12 && digits.startsWith('55')) {
-      international = '+$digits';
-    } else if (digits.length == 13 && digits.startsWith('55')) {
-      international = '+$digits';
-    }
-    if (international != null) {
-      if (!hadPlus) {
-        try {
-          final parsed = PhoneNumber.parse(international!);
-          if (parsed.isValid()) {
-            international = '+${parsed.countryCode}${parsed.nsn}';
-          }
-        } catch (_) {}
-      }
-      if (international!.length >= 12 && international!.length <= 16) {
-        result.add(international!);
+      if (international != null) {
+        if (!hadPlus) {
+          try {
+            final parsed = PhoneNumber.parse(international!);
+            if (parsed.isValid()) {
+              international = '+${parsed.countryCode}${parsed.nsn}';
+            }
+          } catch (_) {}
+        }
+        if (international!.length >= 12 && international!.length <= 16) {
+          result.add(international!);
+        }
       }
     }
   }
