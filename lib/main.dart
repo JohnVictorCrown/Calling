@@ -181,21 +181,44 @@ class _CallCenterHomeState extends State<CallCenterHome> with WidgetsBindingObse
     setState(() => _isLoading = true);
     final dbPath = await getDatabasesPath();
     final db = await openDatabase(p.join(dbPath, 'callcenter.db'));
-    RegExp exp = RegExp(r'[\d\+\-\(\)\s]{8,}');
-    Iterable<RegExpMatch> matches = exp.allMatches(_textController.text);
-    for (final match in matches) {
-      String candidate = match.group(0)!.trim();
-      String cleanDigits = candidate.replaceAll(RegExp(r'\D'), '');
-      if (cleanDigits.length == 10 && int.parse(cleanDigits.substring(2, 3)) >= 6) {
-          candidate = '${cleanDigits.substring(0, 2)}9${cleanDigits.substring(2)}';
-      }
-      try {
-        final parsed = PhoneNumber.parse(candidate, destinationCountry: IsoCode.BR);
-        if (parsed.isValid()) {
-          String international = '+${parsed.countryCode}${parsed.nsn}'; 
-          await db.insert('numbers', {'number': international, 'wasCalled': 0}, conflictAlgorithm: ConflictAlgorithm.ignore);
+    final text = _textController.text;
+    final lines = text.split(RegExp(r'[\r\n]+'));
+
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      String digits = line.replaceAll(RegExp(r'\D'), '');
+      if (digits.isEmpty) continue;
+
+      bool hadPlus = line.contains('+');
+      String? international;
+
+      if (hadPlus && digits.length >= 10 && digits.length <= 15) {
+        international = '+$digits';
+      } else if (digits.length == 10 || digits.length == 11) {
+        if (digits.length == 10 && (int.tryParse(digits.substring(2, 3)) ?? 0) >= 6) {
+          digits = '${digits.substring(0, 2)}9${digits.substring(2)}';
         }
-      } catch (_) {}
+        international = '+55$digits';
+      } else if (digits.length == 12 && digits.startsWith('55')) {
+        international = '+$digits';
+      } else if (digits.length == 13 && digits.startsWith('55')) {
+        international = '+$digits';
+      }
+
+      if (international != null) {
+        try {
+          final parsed = PhoneNumber.parse(international);
+          if (parsed.isValid()) {
+            international = '+${parsed.countryCode}${parsed.nsn}';
+          }
+        } catch (_) {}
+        if (international.length >= 12 && international.length <= 16) {
+          await db.insert('numbers', {'number': international, 'wasCalled': 0},
+              conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
+      }
     }
     _textController.clear();
     await db.close();
