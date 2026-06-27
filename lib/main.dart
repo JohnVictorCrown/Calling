@@ -20,6 +20,11 @@ List<String> extractPhoneNumbers(String text) {
       String digits = src.replaceAll(RegExp(r'\D'), '');
       if (digits.isEmpty) continue;
       final hadPlus = src.startsWith('+');
+      if (!hadPlus) {
+        // Strip leading zeros (Brazilian trunk prefix)
+        digits = digits.replaceFirst(RegExp(r'^0+'), '');
+        if (digits.length < 10) continue;
+      }
       String? international;
       if (hadPlus && digits.length >= 10 && digits.length <= 15) {
         international = '+$digits';

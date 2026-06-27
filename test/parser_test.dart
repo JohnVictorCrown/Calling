@@ -174,5 +174,30 @@ void main() {
       final result = extractPhoneNumbers('My US line is +15135328138 please text');
       expect(result, ['+15135328138']);
     });
+
+    test('handles +55 (48) 8800-0514 (international landline)', () {
+      final result = extractPhoneNumbers('+55 (48) 8800-0514');
+      expect(result, ['+554888000514']);
+    });
+
+    test('handles +55 (48) 98800-0514 (international mobile)', () {
+      final result = extractPhoneNumbers('+55 (48) 98800-0514');
+      expect(result, ['+5548988000514']);
+    });
+
+    test('handles (48) 8800-0514 (national landline, injects 9)', () {
+      final result = extractPhoneNumbers('(48) 8800-0514');
+      expect(result, ['+5548988000514']);
+    });
+
+    test('handles (48) 98800-0514 (national mobile)', () {
+      final result = extractPhoneNumbers('(48) 98800-0514');
+      expect(result, ['+5548988000514']);
+    });
+
+    test('handles 048 988000514 (trunk prefix, strips leading 0)', () {
+      final result = extractPhoneNumbers('048 988000514');
+      expect(result, ['+5548988000514']);
+    });
   });
 }
