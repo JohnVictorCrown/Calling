@@ -31,12 +31,14 @@ List<String> extractPhoneNumbers(String text) {
       international = '+$digits';
     }
     if (international != null) {
-      try {
-        final parsed = PhoneNumber.parse(international!);
-        if (parsed.isValid()) {
-          international = '+${parsed.countryCode}${parsed.nsn}';
-        }
-      } catch (_) {}
+      if (!hadPlus) {
+        try {
+          final parsed = PhoneNumber.parse(international!);
+          if (parsed.isValid()) {
+            international = '+${parsed.countryCode}${parsed.nsn}';
+          }
+        } catch (_) {}
+      }
       if (international!.length >= 12 && international!.length <= 16) {
         result.add(international!);
       }
