@@ -14,9 +14,11 @@ List<String> extractPhoneNumbers(String text) {
   for (final rawLine in lines) {
     final line = rawLine.trim();
     if (line.isEmpty) continue;
-    String digits = line.replaceAll(RegExp(r'\D'), '');
+    final plusIdx = line.indexOf('+');
+    final src = plusIdx >= 0 ? line.substring(plusIdx) : line;
+    String digits = src.replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) continue;
-    final hadPlus = line.contains('+');
+    final hadPlus = plusIdx >= 0;
     String? international;
     if (hadPlus && digits.length >= 10 && digits.length <= 15) {
       international = '+$digits';
@@ -31,9 +33,7 @@ List<String> extractPhoneNumbers(String text) {
       international = '+$digits';
     }
     if (international != null) {
-      final skipParser = line.contains('+');
-      print('DBG: line="$line" digits="$digits" international="$international" skipParser=$skipParser');
-      if (!skipParser) {
+      if (!hadPlus) {
         try {
           final parsed = PhoneNumber.parse(international!);
           if (parsed.isValid()) {
